@@ -201,12 +201,37 @@
       </div>
     </div>
   </div>
+
+  <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+    <!-- REAL TRAFFIC MONITOR -->
+    <div class="panel">
+      <h2>Real Traffic Monitor (/shop)</h2>
+      <div class="stat-row"><span>Requests received</span><span class="v" id="statReceived">0</span></div>
+      <div class="stat-row"><span>Blocked at the door (already blacklisted)</span><span class="v" id="statBlockedFastpath">0</span></div>
+      <div style="margin: 10px 0 6px; font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px;">Action breakdown (real + simulated)</div>
+      <div class="stat-row"><span class="action allow">allow</span><span class="v" id="actAllow">0</span></div>
+      <div class="stat-row"><span class="action" style="color:var(--text-dim);">monitor</span><span class="v" id="actMonitor">0</span></div>
+      <div class="stat-row"><span class="action rate_limit">rate limit</span><span class="v" id="actRateLimit">0</span></div>
+      <div class="stat-row"><span class="action challenge">challenge</span><span class="v" id="actChallenge">0</span></div>
+      <div class="stat-row"><span class="action blacklist">blacklist</span><span class="v" id="actBlacklist">0</span></div>
+      <div style="margin-top:10px; font-size:11px; color: var(--text-dim); line-height:1.5;">
+        Note: a true network-level timeout (request never reaching this server at all) can't be logged here — there's nothing to log. Compare "Requests received" above against however many your test script reports sending; the gap is your best estimate of genuine network-level drops.
+      </div>
+    </div>
+
+    <!-- LIVE SOURCES -->
+    <div class="panel">
+      <h2>Live Sources <span style="color:var(--text-dim); font-weight:normal; text-transform:none; letter-spacing:0;">(active in last 10s)</span></h2>
+      <div id="activeSources"><div class="empty">No active sources right now</div></div>
+    </div>
+  </div>
 </div>
 
 <script>
 const feedEl = document.getElementById('feed');
 const ledgerEl = document.getElementById('ledger');
 const blacklistEl = document.getElementById('blacklist');
+const activeSourcesEl = document.getElementById('activeSources');
 const chainDot = document.getElementById('chainDot');
 const chainStatusText = document.getElementById('chainStatusText');
 const chainLenText = document.getElementById('chainLenText');
@@ -255,18 +280,38 @@ function renderBlacklist(bl) {
   `).join('');
 }
 
+function renderActiveSources(active) {
+  const entries = Object.entries(active || {});
+  if (!entries.length) { activeSourcesEl.innerHTML = '<div class="empty">No active sources right now</div>'; return; }
+  activeSourcesEl.innerHTML = entries.map(([sid, info]) => `
+    <div class="blacklist-item"><span>🌐 ${sid}</span><span style="color:var(--cyan); font-family:var(--mono); font-size:12px;">${info.requests_in_window} req · last ${info.last_seen_seconds_ago}s ago</span></div>
+  `).join('');
+}
+
 async function refreshState() {
   const res = await fetch('/api/state');
   const data = await res.json();
   renderFeed(data.recent_flows);
   renderLedger(data.chain);
   renderBlacklist(data.blacklisted_sources);
+  renderActiveSources(data.active_sources);
 
   chainDot.className = 'dot' + (data.chain_valid ? '' : ' bad');
   chainStatusText.textContent = data.chain_valid ? 'chain verified' : 'chain INVALID';
   chainLenText.textContent = `${data.chain_length} block${data.chain_length===1?'':'s'}`;
   document.getElementById('statBlocks').textContent = data.chain_length;
   document.getElementById('statBlacklist').textContent = Object.keys(data.blacklisted_sources).length;
+
+  if (data.stats) {
+    document.getElementById('statReceived').textContent = data.stats.requests_received;
+    document.getElementById('statBlockedFastpath').textContent = data.stats.blocked_fastpath;
+    const a = data.stats.action_counts || {};
+    document.getElementById('actAllow').textContent = a.allow || 0;
+    document.getElementById('actMonitor').textContent = a.monitor || 0;
+    document.getElementById('actRateLimit').textContent = a.rate_limit || 0;
+    document.getElementById('actChallenge').textContent = a.challenge || 0;
+    document.getElementById('actBlacklist').textContent = a.blacklist || 0;
+  }
 }
 
 async function simulate(label, count) {
