@@ -36,20 +36,54 @@ FEATURES = [
 
 
 def make_benign(n, rng):
-    return pd.DataFrame({
-        "packet_rate": rng.normal(120, 40, n).clip(1),
-        "byte_rate": rng.normal(90_000, 30_000, n).clip(500),
-        "avg_packet_size": rng.normal(650, 150, n).clip(64),
-        "flow_duration": rng.exponential(8, n).clip(0.1),
-        "syn_ratio": rng.beta(2, 20, n),
-        "src_ip_entropy": rng.normal(3.2, 0.6, n).clip(0.5),
-        "unique_src_ips": rng.integers(5, 60, n),
-        "protocol_udp_frac": rng.beta(2, 8, n),
-        "protocol_tcp_frac": rng.beta(8, 3, n),
-        "protocol_http_frac": rng.beta(5, 5, n),
-        "avg_inter_arrival": rng.exponential(0.05, n).clip(0.001),
-        "label": "benign",
+    """Two benign regimes are blended here:
+
+    1. multi_user   -- typical production traffic with several concurrent
+       visitors (the original, only regime this function generated).
+    2. lone_visitor -- a single real visitor browsing normally: low,
+       human-paced request rate, but (critically) unique_src_ips=1 and
+       src_ip_entropy=0, exactly like a single-source flood's source
+       diversity. Without this regime the model had never seen a benign
+       example with low source diversity, so it treated ANY single-source
+       traffic as an attack regardless of rate -- including one legitimate
+       page load. Including this regime teaches the model that packet_rate
+       (human-paced vs. bot-paced) is what actually separates a lone
+       visitor from a lone attacker, not source diversity alone.
+    """
+    n_multi = int(n * 0.75)
+    n_lone = n - n_multi
+
+    multi_user = pd.DataFrame({
+        "packet_rate": rng.normal(120, 40, n_multi).clip(1),
+        "byte_rate": rng.normal(90_000, 30_000, n_multi).clip(500),
+        "avg_packet_size": rng.normal(650, 150, n_multi).clip(64),
+        "flow_duration": rng.exponential(8, n_multi).clip(0.1),
+        "syn_ratio": rng.beta(2, 20, n_multi),
+        "src_ip_entropy": rng.normal(3.2, 0.6, n_multi).clip(0.5),
+        "unique_src_ips": rng.integers(5, 60, n_multi),
+        "protocol_udp_frac": rng.beta(2, 8, n_multi),
+        "protocol_tcp_frac": rng.beta(8, 3, n_multi),
+        "protocol_http_frac": rng.beta(5, 5, n_multi),
+        "avg_inter_arrival": rng.exponential(0.05, n_multi).clip(0.001),
     })
+
+    lone_visitor = pd.DataFrame({
+        "packet_rate": rng.uniform(0.05, 3.0, n_lone),          # human page-load pace, well under the http_flood heuristic/model range
+        "byte_rate": rng.uniform(200, 4_000, n_lone),
+        "avg_packet_size": rng.normal(500, 120, n_lone).clip(64),
+        "flow_duration": rng.exponential(10, n_lone).clip(0.1),
+        "syn_ratio": np.zeros(n_lone),
+        "src_ip_entropy": np.zeros(n_lone),                     # only one source active -- same as a real lone visitor
+        "unique_src_ips": np.ones(n_lone, dtype=int),
+        "protocol_udp_frac": np.zeros(n_lone),
+        "protocol_tcp_frac": np.ones(n_lone),
+        "protocol_http_frac": np.ones(n_lone),
+        "avg_inter_arrival": rng.uniform(0.5, 8.0, n_lone),     # seconds between clicks/page loads -- human-paced, not bot-paced
+    })
+
+    df = pd.concat([multi_user, lone_visitor], ignore_index=True)
+    df["label"] = "benign"
+    return df
 
 
 def make_syn_flood(n, rng):
@@ -87,20 +121,55 @@ def make_udp_flood(n, rng):
 
 
 def make_http_flood(n, rng):
-    return pd.DataFrame({
-        "packet_rate": rng.normal(2500, 800, n).clip(200),
-        "byte_rate": rng.normal(300_000, 90_000, n).clip(5_000),
-        "avg_packet_size": rng.normal(400, 80, n).clip(100),
-        "flow_duration": rng.exponential(15, n).clip(0.2),
-        "syn_ratio": rng.beta(3, 15, n),
-        "src_ip_entropy": rng.normal(2.0, 0.5, n).clip(0.2),  # fewer, persistent bots
-        "unique_src_ips": rng.integers(50, 800, n),
-        "protocol_udp_frac": rng.beta(1, 20, n),
-        "protocol_tcp_frac": rng.beta(10, 5, n),
-        "protocol_http_frac": rng.beta(25, 2, n),
-        "avg_inter_arrival": rng.exponential(0.004, n).clip(0.0001),
-        "label": "http_flood",
+    """Two http_flood regimes are blended here:
+
+    1. distributed  -- a large botnet-style flood (many source IPs, very
+       high packet rate). This was the original (and only) regime this
+       function generated.
+    2. single_source -- a single-client, HTTP-layer burst: the pattern a
+       Flask app actually observes when one real machine hammers it
+       (see ml/request_monitor.py). Rates here are far lower than a
+       botnet flood but still well above normal single-user browsing,
+       and syn_ratio/protocol_udp_frac are pinned to 0 since a Flask app
+       can never observe those at this layer. Without this regime the
+       trained classifier only recognizes large distributed floods and
+       will call a genuine single-source burst "benign" (out-of-
+       distribution input), regardless of how aggressive it is.
+    """
+    n_distributed = n // 2
+    n_single_source = n - n_distributed
+
+    distributed = pd.DataFrame({
+        "packet_rate": rng.normal(2500, 800, n_distributed).clip(200),
+        "byte_rate": rng.normal(300_000, 90_000, n_distributed).clip(5_000),
+        "avg_packet_size": rng.normal(400, 80, n_distributed).clip(100),
+        "flow_duration": rng.exponential(15, n_distributed).clip(0.2),
+        "syn_ratio": rng.beta(3, 15, n_distributed),
+        "src_ip_entropy": rng.normal(2.0, 0.5, n_distributed).clip(0.2),
+        "unique_src_ips": rng.integers(50, 800, n_distributed),
+        "protocol_udp_frac": rng.beta(1, 20, n_distributed),
+        "protocol_tcp_frac": rng.beta(10, 5, n_distributed),
+        "protocol_http_frac": rng.beta(25, 2, n_distributed),
+        "avg_inter_arrival": rng.exponential(0.004, n_distributed).clip(0.0001),
     })
+
+    single_source = pd.DataFrame({
+        "packet_rate": rng.uniform(5, 60, n_single_source),
+        "byte_rate": rng.uniform(1_000, 20_000, n_single_source),
+        "avg_packet_size": rng.normal(250, 60, n_single_source).clip(80),
+        "flow_duration": rng.exponential(6, n_single_source).clip(0.2),
+        "syn_ratio": np.zeros(n_single_source),
+        "src_ip_entropy": rng.uniform(0.0, 0.3, n_single_source),
+        "unique_src_ips": rng.integers(1, 3, n_single_source),
+        "protocol_udp_frac": np.zeros(n_single_source),
+        "protocol_tcp_frac": np.ones(n_single_source),
+        "protocol_http_frac": np.ones(n_single_source),
+        "avg_inter_arrival": rng.uniform(0.01, 0.2, n_single_source),
+    })
+
+    df = pd.concat([distributed, single_source], ignore_index=True)
+    df["label"] = "http_flood"
+    return df
 
 
 def build_dataset(n_rows, attack_fraction, seed):
