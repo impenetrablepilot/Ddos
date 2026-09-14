@@ -30,43 +30,52 @@ from request_monitor import rate_heuristic_label
 
 protected_site = Blueprint("protected_site", __name__)
 
-# In-memory demo catalog -- the "real" content being protected.
-PRODUCTS = [
-    {"id": 1, "name": "ShieldChain T-Shirt", "price": "$19.99"},
-    {"id": 2, "name": "Blockchain Sticker Pack", "price": "$4.99"},
-    {"id": 3, "name": "Proof-of-Work Mug", "price": "$12.50"},
+# In-memory demo content -- the "real" content being protected. Reskinned
+# as a personal profile page rather than a shop; the monitoring and
+# enforcement logic below is completely unaffected by this -- it protects
+# whatever content this route serves, regardless of what that content is.
+PROFILE_LINKS = [
+    {"label": "Instagram", "url": "https://www.instagram.com/nandhu_rahul_g", "icon": "📷"},
 ]
 
 SHOP_TEMPLATE = """
 <!DOCTYPE html>
-<html><head><title>ShieldChain Mini-Shop (demo protected site)</title>
+<html><head><title>Nandhu Rahul G (ShieldChain-protected page)</title>
 <style>
-  body { font-family: sans-serif; background:#0a0d12; color:#e6e9ef; padding: 40px; }
-  .card { background:#10141b; border:1px solid #1e2530; border-radius:8px; padding:16px; margin-bottom:12px; max-width:400px; }
-  h1 { color:#3ec9c9; }
-  .price { color:#4caf7d; font-weight:bold; }
-  .note { color:#7a8494; font-size:13px; max-width:500px; }
+  body { font-family: sans-serif; background:#0a0d12; color:#e6e9ef; padding: 40px; display:flex; justify-content:center; }
+  .profile-wrap { max-width: 480px; width: 100%; text-align: center; }
+  .avatar {
+    width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 16px;
+    background: linear-gradient(135deg, #3ec9c9, #8a7cf0);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; font-weight: bold; color: #06090d;
+  }
+  h1 { color: #e6e9ef; margin-bottom: 4px; }
+  .handle { color: #3ec9c9; font-family: monospace; margin-bottom: 18px; }
+  .note { color:#7a8494; font-size:13px; text-align: left; background:#10141b; border:1px solid #1e2530; border-radius:8px; padding:14px; margin: 20px 0; }
   .insta-btn {
     display: inline-flex; align-items: center; gap: 8px;
-    margin-top: 20px; padding: 10px 18px; border-radius: 8px;
+    margin-top: 12px; padding: 12px 24px; border-radius: 8px;
     background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
-    color: #fff; text-decoration: none; font-weight: 600; font-size: 14px;
-    max-width: fit-content;
+    color: #fff; text-decoration: none; font-weight: 600; font-size: 15px;
   }
   .insta-btn:hover { opacity: 0.9; }
 </style>
 </head><body>
-  <h1>ShieldChain Mini-Shop</h1>
-  <p class="note">This is a small, self-owned demo site used to generate and monitor
-  <b>real</b> HTTP traffic for the ShieldChain project -- every request here is
-  genuinely captured and classified, not simulated. See the main dashboard's
-  "Real Traffic" panel for live detections.</p>
-  {% for p in products %}
-    <div class="card"><b>{{ p.name }}</b><br><span class="price">{{ p.price }}</span></div>
-  {% endfor %}
-  <a class="insta-btn" href="https://www.instagram.com/nandhu_rahul_g" target="_blank" rel="noopener">
-    📷 Follow us on Instagram
-  </a>
+  <div class="profile-wrap">
+    <div class="avatar">NR</div>
+    <h1>Nandhu Rahul G</h1>
+    <div class="handle">@nandhu_rahul_g</div>
+    <p class="note">This page is protected by <b>ShieldChain</b> -- a small, self-owned
+    endpoint used to generate and monitor <b>real</b> HTTP traffic for the ShieldChain
+    DDoS-defense project. Every visit here is genuinely captured and classified, not
+    simulated. See the main dashboard's "Real Traffic Monitor" panel for live detections.</p>
+    {% for link in links %}
+      <a class="insta-btn" href="{{ link.url }}" target="_blank" rel="noopener">
+        {{ link.icon }} {{ link.label }}
+      </a>
+    {% endfor %}
+  </div>
 </body></html>
 """
 
@@ -168,6 +177,6 @@ def register_shop_routes(app, monitor, detector, contract, chain, on_event=None,
         if on_event:
             on_event(event)
 
-        return render_template_string(SHOP_TEMPLATE, products=PRODUCTS)
+        return render_template_string(SHOP_TEMPLATE, links=PROFILE_LINKS)
 
     return app
