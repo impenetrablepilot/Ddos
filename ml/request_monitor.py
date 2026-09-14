@@ -28,6 +28,20 @@ concentrated on very few source IPs. This is a real, meaningful subset
 of DDoS defense (Slowloris/HTTP-flood-class attacks specifically operate
 at this layer), just not the full space of attacks the synthetic
 training data covers.
+
+HEURISTIC OVERRIDE: the synthetic training data (see generate_traffic.py)
+originally modeled http_flood as large distributed botnet traffic
+(hundreds of source IPs at thousands of packets/sec). A single real
+test script hitting this app from one machine can never reach that
+scale or IP diversity, so on real traffic the trained classifier was
+consistently (and reasonably, given its original training data)
+returning "benign". generate_traffic.py has since been updated to also
+include a single-source, moderate-rate http_flood regime so the model
+itself can learn this pattern -- but as a defense-in-depth measure (and
+so the demo still works immediately without retraining), rate_heuristic_label()
+below provides a simple, deterministic rule that flags a sustained,
+low-diversity request burst from one source even if the ML model
+disagrees.
 """
 import time
 import math
@@ -36,6 +50,14 @@ from typing import Dict, Any, Optional
 
 WINDOW_SECONDS = 5.0        # sliding window used to compute per-source rate features
 GLOBAL_WINDOW_SECONDS = 10.0  # window used to compute site-wide source-IP entropy
+
+# Deterministic rule-based override thresholds (defense-in-depth alongside the
+# ML model -- see module docstring). Tuned so ordinary human browsing (a few
+# page loads/refreshes per minute) stays well under the threshold, while a
+# sustained script/bot burst from one source trips it quickly.
+HEURISTIC_RATE_THRESHOLD = 5.0   # requests/sec, sustained, from a single source
+HEURISTIC_MIN_SAMPLES = 5        # require a few samples so one fast double-click doesn't trip it
+HEURISTIC_MAX_UNIQUE_SRC = 2     # flood must be dominated by one (or almost one) source
 
 
 class RequestMonitor:
@@ -127,3 +149,46 @@ class RequestMonitor:
             p = c / total
             entropy -= p * math.log2(p)
         return entropy
+
+    def sample_count(self, source_id: str) -> int:
+        """How many requests from this source are currently in the window
+        -- used by the heuristic override to avoid tripping on too few
+        samples."""
+        return len(self._by_source.get(source_id, ()))
+
+    def active_sources(self, within_seconds: float = 10.0):
+        """Sources with at least one real request in the last
+        `within_seconds` -- used by the dashboard's 'Live Sources' panel
+        to show who is currently active on the real /shop endpoint,
+        distinct from the historical event feed."""
+        now = time.time()
+        active = {}
+        for source_id, times in self._by_source.items():
+            if times and (now - times[-1]) <= within_seconds:
+                active[source_id] = {
+                    "last_seen_seconds_ago": round(now - times[-1], 1),
+                    "requests_in_window": len(times),
+                }
+        return active
+
+
+def rate_heuristic_label(features: Dict[str, Any], sample_count: int) -> Optional[str]:
+    """Deterministic, ML-independent check for a sustained single-source
+    request burst. Returns 'http_flood' if the burst pattern is met,
+    otherwise None (defer entirely to the ML model).
+
+    This exists because the ML model's training data (see
+    generate_traffic.py) originally only modeled http_flood as large,
+    distributed botnet traffic -- a single real test client could never
+    match that shape and was always (reasonably, given that training
+    data) classified as benign. This rule provides an immediate,
+    explainable backstop regardless of what the ML model has learned.
+    """
+    if sample_count < HEURISTIC_MIN_SAMPLES:
+        return None
+    if features["packet_rate"] < HEURISTIC_RATE_THRESHOLD:
+        return None
+    if features["unique_src_ips"] > HEURISTIC_MAX_UNIQUE_SRC:
+        return None
+    return "http_flood"
+
