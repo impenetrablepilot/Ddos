@@ -57,9 +57,12 @@ INSTAGRAM_POSTS = [
 SHOP_TEMPLATE = """
 <!DOCTYPE html>
 <html><head><title>Nandhu Rahul G (ShieldChain-protected page)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  body { font-family: sans-serif; background:#0a0d12; color:#e6e9ef; padding: 40px; display:flex; justify-content:center; }
-  .profile-wrap { max-width: 480px; width: 100%; text-align: center; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 100%; background:#0a0d12; color:#e6e9ef; font-family: sans-serif; }
+  .page-wrap { width: 100%; padding: 32px 24px 60px; }
+  .profile-header { text-align: center; margin-bottom: 28px; }
   .avatar {
     width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 16px;
     background: linear-gradient(135deg, #3ec9c9, #8a7cf0);
@@ -68,7 +71,11 @@ SHOP_TEMPLATE = """
   }
   h1 { color: #e6e9ef; margin-bottom: 4px; }
   .handle { color: #3ec9c9; font-family: monospace; margin-bottom: 18px; }
-  .note { color:#7a8494; font-size:13px; text-align: left; background:#10141b; border:1px solid #1e2530; border-radius:8px; padding:14px; margin: 20px 0; }
+  .note {
+    color:#7a8494; font-size:13px; text-align: left; background:#10141b;
+    border:1px solid #1e2530; border-radius:8px; padding:14px;
+    margin: 20px auto; max-width: 640px;
+  }
   .insta-btn {
     display: inline-flex; align-items: center; gap: 8px;
     margin-top: 12px; padding: 12px 24px; border-radius: 8px;
@@ -76,28 +83,50 @@ SHOP_TEMPLATE = """
     color: #fff; text-decoration: none; font-weight: 600; font-size: 15px;
   }
   .insta-btn:hover { opacity: 0.9; }
-  .posts-heading { margin-top: 36px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #7a8494; }
-  .posts-grid { display: flex; flex-direction: column; gap: 20px; margin-top: 14px; align-items: center; }
+  .posts-heading {
+    margin: 36px 0 14px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: 1px; color: #7a8494; text-align: center;
+  }
+
+  /* Desktop / tablet: responsive multi-column grid, edge-to-edge */
+  .posts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    width: 100%;
+  }
+  .posts-grid > div { width: 100%; display: flex; justify-content: center; }
+  .posts-grid iframe, .posts-grid .instagram-media { width: 100% !important; }
+
+  /* Mobile: single-column list view */
+  @media (max-width: 640px) {
+    .page-wrap { padding: 20px 12px 40px; }
+    .posts-grid { grid-template-columns: 1fr; gap: 24px; }
+  }
 </style>
 </head><body>
-  <div class="profile-wrap">
-    <div class="avatar">NR</div>
-    <h1>Nandhu Rahul G</h1>
-    <div class="handle">@nandhu_rahul_g</div>
-    <p class="note">This page is protected by <b>ShieldChain</b> -- a small, self-owned
-    endpoint used to generate and monitor <b>real</b> HTTP traffic for the ShieldChain
-    DDoS-defense project. Every visit here is genuinely captured and classified, not
-    simulated. See the main dashboard's "Real Traffic Monitor" panel for live detections.</p>
-    {% for link in links %}
-      <a class="insta-btn" href="{{ link.url }}" target="_blank" rel="noopener">
-        {{ link.icon }} {{ link.label }}
-      </a>
-    {% endfor %}
+  <div class="page-wrap">
+    <div class="profile-header">
+      <div class="avatar">NR</div>
+      <h1>Nandhu Rahul G</h1>
+      <div class="handle">@nandhu_rahul_g</div>
+      <p class="note">This page is protected by <b>ShieldChain</b> -- a small, self-owned
+      endpoint used to generate and monitor <b>real</b> HTTP traffic for the ShieldChain
+      DDoS-defense project. Every visit here is genuinely captured and classified, not
+      simulated. See the main dashboard's "Real Traffic Monitor" panel for live detections.</p>
+      {% for link in links %}
+        <a class="insta-btn" href="{{ link.url }}" target="_blank" rel="noopener">
+          {{ link.icon }} {{ link.label }}
+        </a>
+      {% endfor %}
+    </div>
 
     <div class="posts-heading">Recent Posts</div>
     <div class="posts-grid">
       {% for post_url in posts %}
-        <blockquote class="instagram-media" data-instgrm-permalink="{{ post_url }}" data-instgrm-version="14" style="max-width:400px; width:100%;"></blockquote>
+        <div>
+          <blockquote class="instagram-media" data-instgrm-permalink="{{ post_url }}" data-instgrm-version="14" style="max-width:100%; width:100%;"></blockquote>
+        </div>
       {% endfor %}
     </div>
   </div>
