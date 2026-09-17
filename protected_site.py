@@ -38,6 +38,22 @@ PROFILE_LINKS = [
     {"label": "Instagram", "url": "https://www.instagram.com/nandhu_rahul_g", "icon": "📷"},
 ]
 
+# Individual public posts to embed via Instagram's official oEmbed widget.
+# Query params (e.g. ?stkn=...) are stripped -- the embed widget expects
+# the canonical /p/<shortcode>/ permalink. If a given post is private or
+# the link is a restricted share-token link rather than a public post,
+# Instagram's own embed.js will simply fail to render that one card (it
+# resolves client-side, in the visitor's browser) -- swap that entry out
+# for a genuinely public post if that happens.
+INSTAGRAM_POSTS = [
+    "https://www.instagram.com/p/Cyac3ueRXbB/",
+    "https://www.instagram.com/p/CAJdgTLBQBq/",
+    "https://www.instagram.com/p/DUeVNBok302/",
+    "https://www.instagram.com/p/DTf-uCXEvUh/",
+    "https://www.instagram.com/p/DQgCCpJkWv9/",
+    "https://www.instagram.com/p/Cyntpcixkk1/",
+]
+
 SHOP_TEMPLATE = """
 <!DOCTYPE html>
 <html><head><title>Nandhu Rahul G (ShieldChain-protected page)</title>
@@ -60,6 +76,8 @@ SHOP_TEMPLATE = """
     color: #fff; text-decoration: none; font-weight: 600; font-size: 15px;
   }
   .insta-btn:hover { opacity: 0.9; }
+  .posts-heading { margin-top: 36px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #7a8494; }
+  .posts-grid { display: flex; flex-direction: column; gap: 20px; margin-top: 14px; align-items: center; }
 </style>
 </head><body>
   <div class="profile-wrap">
@@ -75,7 +93,15 @@ SHOP_TEMPLATE = """
         {{ link.icon }} {{ link.label }}
       </a>
     {% endfor %}
+
+    <div class="posts-heading">Recent Posts</div>
+    <div class="posts-grid">
+      {% for post_url in posts %}
+        <blockquote class="instagram-media" data-instgrm-permalink="{{ post_url }}" data-instgrm-version="14" style="max-width:400px; width:100%;"></blockquote>
+      {% endfor %}
+    </div>
   </div>
+  <script async src="//www.instagram.com/embed.js"></script>
 </body></html>
 """
 
@@ -118,7 +144,7 @@ def register_shop_routes(app, monitor, detector, contract, chain, on_event=None,
 
     @app.before_request
     def _shop_gate():
-        if not request.path.startswith("/shop"):
+        if not (request.path.startswith("/shop") or request.path.startswith("/nandhu")):
             return None  # not a protected route, let it through untouched
 
         stats["requests_received"] += 1
@@ -128,6 +154,8 @@ def register_shop_routes(app, monitor, detector, contract, chain, on_event=None,
             return render_template_string(BLOCKED_TEMPLATE), 429
         return None
 
+    @app.route("/nandhu/")
+    @app.route("/nandhu")
     @app.route("/shop/")
     @app.route("/shop")
     def shop_index():
@@ -177,6 +205,6 @@ def register_shop_routes(app, monitor, detector, contract, chain, on_event=None,
         if on_event:
             on_event(event)
 
-        return render_template_string(SHOP_TEMPLATE, links=PROFILE_LINKS)
+        return render_template_string(SHOP_TEMPLATE, links=PROFILE_LINKS, posts=INSTAGRAM_POSTS)
 
     return app
