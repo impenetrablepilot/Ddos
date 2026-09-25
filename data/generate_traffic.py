@@ -87,37 +87,93 @@ def make_benign(n, rng):
 
 
 def make_syn_flood(n, rng):
-    return pd.DataFrame({
-        "packet_rate": rng.normal(9000, 2500, n).clip(500),
-        "byte_rate": rng.normal(500_000, 150_000, n).clip(10_000),
-        "avg_packet_size": rng.normal(60, 10, n).clip(40),
-        "flow_duration": rng.exponential(2, n).clip(0.05),
-        "syn_ratio": rng.beta(20, 2, n),          # almost all SYN
-        "src_ip_entropy": rng.normal(6.5, 0.8, n).clip(1),  # many spoofed IPs
-        "unique_src_ips": rng.integers(500, 5000, n),
-        "protocol_udp_frac": rng.beta(1, 20, n),
-        "protocol_tcp_frac": rng.beta(20, 1, n),
-        "protocol_http_frac": rng.beta(1, 30, n),
-        "avg_inter_arrival": rng.exponential(0.0005, n).clip(0.00001),
-        "label": "syn_flood",
+    """Two syn_flood regimes are blended here, mirroring make_http_flood's
+    distributed/single_source split (see that function's docstring for
+    the full rationale). A real SYN flood is conventionally launched from
+    many spoofed source addresses (the 'distributed' regime below), but a
+    single, non-spoofed attacking machine -- e.g. one compromised, powerful
+    server, or the kind of single-machine test this project's own
+    network_monitor.py performs -- is also a genuine, real-world case, and
+    was found to score only marginally (~0.58 confidence, just under the
+    0.60 mitigation threshold) against a model trained only on the
+    distributed regime, since unique_src_ips=1 / src_ip_entropy=0 had never
+    been paired with a genuine attack-rate example for this class.
+    """
+    n_distributed = n // 2
+    n_single_source = n - n_distributed
+
+    distributed = pd.DataFrame({
+        "packet_rate": rng.normal(9000, 2500, n_distributed).clip(500),
+        "byte_rate": rng.normal(500_000, 150_000, n_distributed).clip(10_000),
+        "avg_packet_size": rng.normal(60, 10, n_distributed).clip(40),
+        "flow_duration": rng.exponential(2, n_distributed).clip(0.05),
+        "syn_ratio": rng.beta(20, 2, n_distributed),          # almost all SYN
+        "src_ip_entropy": rng.normal(6.5, 0.8, n_distributed).clip(1),  # many spoofed IPs
+        "unique_src_ips": rng.integers(500, 5000, n_distributed),
+        "protocol_udp_frac": rng.beta(1, 20, n_distributed),
+        "protocol_tcp_frac": rng.beta(20, 1, n_distributed),
+        "protocol_http_frac": rng.beta(1, 30, n_distributed),
+        "avg_inter_arrival": rng.exponential(0.0005, n_distributed).clip(0.00001),
     })
+
+    single_source = pd.DataFrame({
+        "packet_rate": rng.normal(9000, 2500, n_single_source).clip(500),  # same real attack rate
+        "byte_rate": rng.normal(500_000, 150_000, n_single_source).clip(10_000),
+        "avg_packet_size": rng.normal(60, 10, n_single_source).clip(40),
+        "flow_duration": rng.exponential(2, n_single_source).clip(0.05),
+        "syn_ratio": rng.beta(20, 2, n_single_source),
+        "src_ip_entropy": np.zeros(n_single_source),           # one real, non-spoofed source
+        "unique_src_ips": rng.integers(1, 3, n_single_source),
+        "protocol_udp_frac": rng.beta(1, 20, n_single_source),
+        "protocol_tcp_frac": rng.beta(20, 1, n_single_source),
+        "protocol_http_frac": rng.beta(1, 30, n_single_source),
+        "avg_inter_arrival": rng.exponential(0.0005, n_single_source).clip(0.00001),
+    })
+
+    df = pd.concat([distributed, single_source], ignore_index=True)
+    df["label"] = "syn_flood"
+    return df
 
 
 def make_udp_flood(n, rng):
-    return pd.DataFrame({
-        "packet_rate": rng.normal(12000, 3000, n).clip(500),
-        "byte_rate": rng.normal(2_000_000, 500_000, n).clip(50_000),
-        "avg_packet_size": rng.normal(1200, 200, n).clip(200),
-        "flow_duration": rng.exponential(1.5, n).clip(0.05),
-        "syn_ratio": rng.beta(1, 30, n),
-        "src_ip_entropy": rng.normal(6.0, 0.9, n).clip(1),
-        "unique_src_ips": rng.integers(300, 4000, n),
-        "protocol_udp_frac": rng.beta(25, 1, n),
-        "protocol_tcp_frac": rng.beta(1, 25, n),
-        "protocol_http_frac": rng.beta(1, 30, n),
-        "avg_inter_arrival": rng.exponential(0.0004, n).clip(0.00001),
-        "label": "udp_flood",
+    """Same distributed/single_source blend as make_syn_flood, for the
+    same reason: a single real machine capable of a genuine UDP flood
+    (e.g. via a misconfigured amplification relay it controls) is a real
+    case the original distributed-only training data didn't cover."""
+    n_distributed = n // 2
+    n_single_source = n - n_distributed
+
+    distributed = pd.DataFrame({
+        "packet_rate": rng.normal(12000, 3000, n_distributed).clip(500),
+        "byte_rate": rng.normal(2_000_000, 500_000, n_distributed).clip(50_000),
+        "avg_packet_size": rng.normal(1200, 200, n_distributed).clip(200),
+        "flow_duration": rng.exponential(1.5, n_distributed).clip(0.05),
+        "syn_ratio": rng.beta(1, 30, n_distributed),
+        "src_ip_entropy": rng.normal(6.0, 0.9, n_distributed).clip(1),
+        "unique_src_ips": rng.integers(300, 4000, n_distributed),
+        "protocol_udp_frac": rng.beta(25, 1, n_distributed),
+        "protocol_tcp_frac": rng.beta(1, 25, n_distributed),
+        "protocol_http_frac": rng.beta(1, 30, n_distributed),
+        "avg_inter_arrival": rng.exponential(0.0004, n_distributed).clip(0.00001),
     })
+
+    single_source = pd.DataFrame({
+        "packet_rate": rng.normal(12000, 3000, n_single_source).clip(500),
+        "byte_rate": rng.normal(2_000_000, 500_000, n_single_source).clip(50_000),
+        "avg_packet_size": rng.normal(1200, 200, n_single_source).clip(200),
+        "flow_duration": rng.exponential(1.5, n_single_source).clip(0.05),
+        "syn_ratio": rng.beta(1, 30, n_single_source),
+        "src_ip_entropy": np.zeros(n_single_source),
+        "unique_src_ips": rng.integers(1, 3, n_single_source),
+        "protocol_udp_frac": rng.beta(25, 1, n_single_source),
+        "protocol_tcp_frac": rng.beta(1, 25, n_single_source),
+        "protocol_http_frac": rng.beta(1, 30, n_single_source),
+        "avg_inter_arrival": rng.exponential(0.0004, n_single_source).clip(0.00001),
+    })
+
+    df = pd.concat([distributed, single_source], ignore_index=True)
+    df["label"] = "udp_flood"
+    return df
 
 
 def make_http_flood(n, rng):

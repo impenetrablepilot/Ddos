@@ -71,16 +71,16 @@
     "udp_flood"
   ],
   "feature_importances": {
-    "packet_rate": 0.1679493345135117,
-    "byte_rate": 0.10695023436402135,
-    "avg_packet_size": 0.10566373976329366,
-    "flow_duration": 0.00029676951472585347,
-    "syn_ratio": 0.059877654959348305,
-    "src_ip_entropy": 0.10192829899863176,
-    "unique_src_ips": 0.13548453398319638,
-    "protocol_udp_frac": 0.07310697748562464,
-    "protocol_tcp_frac": 0.06562140673802194,
-    "protocol_http_frac": 0.1087423674555938,
-    "avg_inter_arrival": 0.07437868222403057
+    "packet_rate": 0.19818827961002014,
+    "byte_rate": 0.13515434177356994,
+    "avg_packet_size": 0.12137247408948056,
+    "flow_duration": 0.0028900762545841776,
+    "syn_ratio": 0.08546227510761566,
+    "src_ip_entropy": 0.04415004793505409,
+    "unique_src_ips": 0.03194053204331663,
+    "protocol_udp_frac": 0.08223317290823536,
+    "protocol_tcp_frac": 0.063264286699002,
+    "protocol_http_frac": 0.13343023273326945,
+    "avg_inter_arrival": 0.10191428084585212
   }
 }
