@@ -71,11 +71,6 @@ SHOP_TEMPLATE = """
   }
   h1 { color: #e6e9ef; margin-bottom: 4px; }
   .handle { color: #3ec9c9; font-family: monospace; margin-bottom: 18px; }
-  .note {
-    color:#7a8494; font-size:13px; text-align: left; background:#10141b;
-    border:1px solid #1e2530; border-radius:8px; padding:14px;
-    margin: 20px auto; max-width: 640px;
-  }
   .insta-btn {
     display: inline-flex; align-items: center; gap: 8px;
     margin-top: 12px; padding: 12px 24px; border-radius: 8px;
@@ -110,10 +105,6 @@ SHOP_TEMPLATE = """
       <div class="avatar">NR</div>
       <h1>Nandhu Rahul G</h1>
       <div class="handle">@nandhu_rahul_g</div>
-      <p class="note">This page is protected by <b>ShieldChain</b> -- a small, self-owned
-      endpoint used to generate and monitor <b>real</b> HTTP traffic for the ShieldChain
-      DDoS-defense project. Every visit here is genuinely captured and classified, not
-      simulated. See the main dashboard's "Real Traffic Monitor" panel for live detections.</p>
       {% for link in links %}
         <a class="insta-btn" href="{{ link.url }}" target="_blank" rel="noopener">
           {{ link.icon }} {{ link.label }}
@@ -146,7 +137,7 @@ BLOCKED_TEMPLATE = """
 """
 
 
-def register_shop_routes(app, monitor, detector, contract, chain, on_event=None, stats=None):
+def register_shop_routes(app, monitor, detector, contract, chain, on_event=None, stats=None, online_learner=None):
     """Wire the demo shop's routes into the main Flask app, sharing the
     same monitor/detector/contract/chain instances the dashboard uses.
 
@@ -208,12 +199,26 @@ def register_shop_routes(app, monitor, detector, contract, chain, on_event=None,
             result["confidence"] = max(result["confidence"], 0.90)
             result["heuristic_override"] = True
 
+        # Safe online learner consulted LAST, and only ever to escalate a
+        # remaining "benign" verdict into a NEW attack pattern it has
+        # since learned (from a previously, independently confirmed
+        # blacklist elsewhere) -- it can never downgrade an existing
+        # attack verdict back to benign. See ml/safe_online_learner.py.
+        if online_learner is not None and result["predicted_label"] == "benign":
+            online_label = online_learner.consult(features)
+            if online_label:
+                result = dict(result)
+                result["predicted_label"] = online_label
+                result["confidence"] = max(result["confidence"], 0.75)
+                result["online_learner_override"] = True
+
         event = {
             "source_id": source_id,
             "predicted_label": result["predicted_label"],
             "confidence": result["confidence"],
             "real_traffic": True,
             "timestamp": time.time(),
+            "_features": features,
         }
         mitigation = contract.evaluate(event)
         event["mitigation_action"] = mitigation["action"]
